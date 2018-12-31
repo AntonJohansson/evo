@@ -14,6 +14,12 @@
 #include "math_helper.hpp"
 #include "profiling.hpp"
 
+#include "perlin.hpp"
+#include <limits>
+#include <algorithm>
+
+#include <vector>
+
 constexpr uint32_t WINDOW_WIDTH  = 800;
 constexpr uint32_t WINDOW_HEIGHT = 600;
 constexpr uint32_t CELL_WIDTH    = 10;
@@ -22,10 +28,21 @@ constexpr uint32_t GRID_WIDTH    = WINDOW_WIDTH/CELL_WIDTH;
 constexpr uint32_t GRID_HEIGHT   = WINDOW_HEIGHT/CELL_HEIGHT;
 constexpr uint32_t GRID_SIZE     = GRID_WIDTH*GRID_HEIGHT;
 constexpr uint32_t PARTICLES     = 1000;
-constexpr float    MAX_SPEED     = 1.0f;
-constexpr float    MAX_GEN_SPEED = 0.01f;
+constexpr float    MAX_SPEED     = 2.0f;
+constexpr float    MAX_GEN_SPEED = 0.05f;
 constexpr uint32_t MUTATION_RATE = 4;
-constexpr uint32_t CYCLE         = 1000;
+constexpr uint32_t CYCLE         = 2000;
+
+std::vector<sf::RectangleShape> walls;
+bool drawing_shape = false;
+sf::Vector2i mouse_pos;
+sf::Vector2f shape_anchor;
+sf::Vector2f shape_corner;
+sf::RectangleShape active_shape;
+
+constexpr uint32_t HISTORY_SIZE = 10*PARTICLES;
+uint32_t history_active_size = 0;
+std::array<sf::Vertex, HISTORY_SIZE> history;
 
 struct Debug{
 	bool active = false;
@@ -62,8 +79,8 @@ float fitness[PARTICLES];
 // Evo
 float goal_radius = 20.0f;
 sf::CircleShape goal_circle(goal_radius);
-//sf::Vector2f goal = {0.9f*WINDOW_WIDTH, 0.5f*WINDOW_HEIGHT};
-sf::Vector2f goal = {0.5f*WINDOW_WIDTH, 0.5f*WINDOW_HEIGHT};
+sf::Vector2f goal = {0.9f*WINDOW_WIDTH, 0.5f*WINDOW_HEIGHT};
+//sf::Vector2f goal = {0.5f*WINDOW_WIDTH, 0.5f*WINDOW_HEIGHT};
 sf::Vector2f start = {0.1f*WINDOW_WIDTH, 0.5f*WINDOW_HEIGHT};
 
 
@@ -93,10 +110,21 @@ inline sf::Vector2f random_vector(){
 }
 
 void randomize_fields(){
+	std::uniform_int_distribution<int32_t> seed_dist(std::numeric_limits<int32_t>::min(), std::numeric_limits<int32_t>::max());
+	std::uniform_real_distribution<float> speed_dist(1.0f, MAX_GEN_SPEED);
 	for(uint32_t i = 0; i < PARTICLES; i++){
+		perlin::seed(seed_dist(mt));
 		for(uint32_t x = 0; x < GRID_WIDTH; x++){
 			for(uint32_t y = 0; y < GRID_HEIGHT; y++){
-				fields[i*GRID_SIZE + x + y*GRID_WIDTH] = random_vector();
+				//fields[i*GRID_SIZE + x + y*GRID_WIDTH] = random_vector();
+					
+				float angle = 2*M_PI*perlin::noise(
+					static_cast<float>(x)/static_cast<float>(GRID_WIDTH),
+					static_cast<float>(y)/static_cast<float>(GRID_HEIGHT),
+					static_cast<float>(x+y+i)/static_cast<float>(PARTICLES+GRID_WIDTH+GRID_HEIGHT)
+					);
+
+				fields[i*GRID_SIZE + x + y*GRID_WIDTH] = speed_dist(mt)*sf::Vector2f(cosf(angle),sinf(angle));
 			}
 		}
 	}
@@ -147,9 +175,27 @@ int main(){
 				}else if(event.key.code == sf::Keyboard::Space){
 					debug.active = !debug.active;
 				}
+			}else if(event.type == sf::Event::MouseButtonPressed){
+				if(!drawing_shape){
+					mouse_pos = sf::Mouse::getPosition(window);
+					shape_anchor = sf::Vector2f(static_cast<float>(mouse_pos.x), static_cast<float>(mouse_pos.y));
+					active_shape.setFillColor(sf::Color(255,100,100));
+					drawing_shape = true;
+				}else{
+					active_shape.setFillColor(sf::Color(100,100,100));
+					walls.push_back(active_shape);
+					drawing_shape = false;
+				}
 			}
 		}
 
+		if(drawing_shape){
+			mouse_pos = sf::Mouse::getPosition(window);
+			shape_corner = sf::Vector2f(static_cast<float>(mouse_pos.x), static_cast<float>(mouse_pos.y));
+
+			active_shape.setSize(shape_corner - shape_anchor);
+			active_shape.setPosition(shape_anchor);
+		}
 		
 		//
 		// EVO
@@ -172,7 +218,7 @@ int main(){
 					auto score = 1/(dist*p.steps_to_goal);
 					score = pow(score, 6);
 					if(p.hit_wall)score *= 0.01f;
-					if(p.hit_goal)score *= 100.0f;
+					if(p.hit_goal)score *= 100000.0f;
 
 					fitness[i] = score;
 
@@ -214,6 +260,7 @@ int main(){
 					memcpy(fields+(i*GRID_SIZE),       old_fields+(parent_1*GRID_SIZE), split*sizeof(sf::Vector2f));
 					memcpy(fields+(i*GRID_SIZE+split), old_fields+(parent_2*GRID_SIZE+split), (GRID_SIZE-split)*sizeof(sf::Vector2f));
 				}
+
 			}
 
 			uint32_t mutations_to_perform = GRID_SIZE * PARTICLES * (MUTATION_RATE/100.0f);
@@ -281,46 +328,58 @@ int main(){
 		//
 		// UPDATE
 		//
-		for(uint32_t i = 0; i < PARTICLES; i++){
-			PROFILE_SCOPE("update")
+		PROFILE_SCOPE("update"){
+			for(uint32_t i = 0; i < PARTICLES; i++){
 
-			auto& p = particles[i];
-			
-			if(p.position.x <= 0 || p.position.x >= WINDOW_WIDTH || p.position.y <= 0 || p.position.y >= WINDOW_HEIGHT){
-				p.hit_wall = true;
+				auto& p = particles[i];
+
+				// Check collision
+
+				if(p.position.x <= 0 || p.position.x >= WINDOW_WIDTH || p.position.y <= 0 || p.position.y >= WINDOW_HEIGHT){
+					p.hit_wall = true;
+				}
+				if(norm(p.position - goal) <= goal_radius){
+					p.hit_wall = true;
+					p.steps_to_goal = CYCLE - steps;
+				}
+
+				for(auto& rect : walls){
+					const auto& bounds = rect.getGlobalBounds();
+					if(bounds.contains(p.position))
+						p.hit_wall = true;
+				}
+
+				// update movement
+				if(!p.hit_wall && !p.hit_goal){
+					uint32_t x = static_cast<uint32_t>(GRID_WIDTH*p.position.x/WINDOW_WIDTH);
+					uint32_t y = static_cast<uint32_t>(GRID_HEIGHT*p.position.y/WINDOW_HEIGHT);
+					auto vec = fields[i*GRID_SIZE + x + y*GRID_WIDTH];
+
+					//p.velocity += 0.1f*vec;
+					p.velocity += 0.05f*vec;
+
+					float l = norm(p.velocity);
+					if(l > MAX_SPEED){
+						p.velocity *= (MAX_SPEED/l);
+					};
+
+					history[history_active_size++%(HISTORY_SIZE)] = sf::Vertex(p.position, sf::Color(255,50,50,100));
+					p.position += p.velocity;
+					//if(isnan(position.x) || isnan(position.y))
+					//	printf("p: %f,%f v: %f, %f a: %f,%f vec: %f, %f\n", position.x, position.y, velocity.x, velocity.y, acceleration.x, acceleration.y, vec.x, vec.y);
+				}
+
+				static sf::Vector2f x_axis = {1,0};
+				static sf::Vector2f front = sf::Vector2f(3/sqrt(2), 0);
+				static sf::Vector2f right = sf::Vector2f(0, 0.5f);
+				auto angle = angle_between(front, p.velocity);
+				auto rotated_front = rotate(front, angle);
+				auto rotated_right = rotate(right, angle);
+
+				particle_dots[3*i + 0] = sf::Vertex(p.position + 5.0f*rotated_front, sf::Color(50, 50, 50));
+				particle_dots[3*i + 1] = sf::Vertex(p.position + 5.0f*rotated_right, sf::Color(255*norm(p.velocity)/MAX_SPEED, 50, 50));
+				particle_dots[3*i + 2] = sf::Vertex(p.position - 5.0f*rotated_right, sf::Color(255*norm(p.velocity)/MAX_SPEED, 50, 50));
 			}
-			if(norm(p.position - goal) <= goal_radius){
-				p.hit_wall = true;
-				p.steps_to_goal = CYCLE - steps;
-			}
-
-			if(!p.hit_wall && !p.hit_goal){
-				uint32_t x = static_cast<uint32_t>(GRID_WIDTH*p.position.x/WINDOW_WIDTH);
-				uint32_t y = static_cast<uint32_t>(GRID_HEIGHT*p.position.y/WINDOW_HEIGHT);
-				auto vec = fields[i*GRID_SIZE + x + y*GRID_WIDTH];
-
-				p.velocity += 0.1f*vec;
-
-				float l = norm(p.velocity);
-				if(l > MAX_SPEED){
-					p.velocity *= (MAX_SPEED/l);
-				};
-
-				p.position += p.velocity;
-				//if(isnan(position.x) || isnan(position.y))
-				//	printf("p: %f,%f v: %f, %f a: %f,%f vec: %f, %f\n", position.x, position.y, velocity.x, velocity.y, acceleration.x, acceleration.y, vec.x, vec.y);
-			}
-
-			static sf::Vector2f x_axis = {1,0};
-			static sf::Vector2f front = sf::Vector2f(3/sqrt(2), 0);
-			static sf::Vector2f right = sf::Vector2f(0, 0.5f);
-			auto angle = angle_between(front, p.velocity);
-			auto rotated_front = rotate(front, angle);
-			auto rotated_right = rotate(right, angle);
-
-			particle_dots[3*i + 0] = sf::Vertex(p.position + 5.0f*rotated_front, sf::Color::Red);
-			particle_dots[3*i + 1] = sf::Vertex(p.position + 5.0f*rotated_right, sf::Color::Red);
-			particle_dots[3*i + 2] = sf::Vertex(p.position - 5.0f*rotated_right, sf::Color::Red);
 		}
 
 		{PROFILE_SCOPE("draw")
@@ -334,6 +393,14 @@ int main(){
 			}
 			window.draw(goal_circle);
 
+			for(auto& rect : walls){
+				window.draw(rect);
+			}
+			if(drawing_shape){
+				window.draw(active_shape);
+			}
+
+			window.draw(&history[0], (history_active_size > history.size()) ? history.size() : history_active_size, sf::Points);
 			window.draw(&particle_dots[0], particle_dots.size(), sf::Triangles);
 
 			if(debug.active){
