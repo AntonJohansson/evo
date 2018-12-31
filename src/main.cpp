@@ -22,7 +22,7 @@ constexpr uint32_t GRID_WIDTH    = WINDOW_WIDTH/CELL_WIDTH;
 constexpr uint32_t GRID_HEIGHT   = WINDOW_HEIGHT/CELL_HEIGHT;
 constexpr uint32_t GRID_SIZE     = GRID_WIDTH*GRID_HEIGHT;
 constexpr uint32_t PARTICLES     = 1000;
-constexpr float    MAX_SPEED     = 2.0f;
+constexpr float    MAX_SPEED     = 1.0f;
 constexpr float    MAX_GEN_SPEED = 0.01f;
 constexpr uint32_t MUTATION_RATE = 4;
 constexpr uint32_t CYCLE         = 1000;
@@ -35,6 +35,7 @@ struct Debug{
 
 	uint32_t generation = 0;
 
+	uint32_t max_fitness_index = 0;
 	sf::Vertex arrows[2*GRID_WIDTH*GRID_HEIGHT];
 } debug;
 
@@ -88,7 +89,7 @@ inline sf::Vector2f random_vector(){
 	float y = sinf(angle);
 
 	return speed*sf::Vector2f{x,y};
-	return sf::Vector2f{x,y};
+	//return sf::Vector2f{x,y};
 }
 
 void randomize_fields(){
@@ -102,7 +103,7 @@ void randomize_fields(){
 }
 
 int main(){
-	const std::string font_path = "../fonts/EBGaramond12-Regular.otf";
+	const std::string font_path = "../fonts/Roboto-Regular.ttf";
 	sf::Font font;
 	if(!font.loadFromFile(font_path)){
 		printf("Unable to load font %s (file not found)!\n", font_path.c_str());
@@ -176,7 +177,10 @@ int main(){
 					fitness[i] = score;
 
 					// track max fitness
-					if(fitness[i] > max_fitness)max_fitness = fitness[i];
+					if(fitness[i] > max_fitness){
+						max_fitness = fitness[i];
+						debug.max_fitness_index = i;
+					}
 				}
 
 				// Normalize
@@ -199,7 +203,6 @@ int main(){
 				};
 
 				memcpy(old_fields, fields, (PARTICLES*GRID_SIZE)*sizeof(sf::Vector2f));
-				//std::normal_distribution<> split_dist(GRID_SIZE/2,GRID_SIZE/2);
 				std::uniform_int_distribution<uint32_t> split_dist(0,GRID_SIZE);
 				for(uint32_t i = 0; i < PARTICLES; i++){
 					auto parent_1 = select(fitness);
@@ -208,8 +211,8 @@ int main(){
 					uint32_t split = std::round(split_dist(mt));
 
 					//memcpy(fields+(i*GRID_SIZE), old_fields+(parent_1*GRID_SIZE), GRID_SIZE*sizeof(sf::Vector2f));
-					memcpy(fields+(parent_1*GRID_SIZE), old_fields+(parent_1*GRID_SIZE), split*sizeof(sf::Vector2f));
-					memcpy(fields+(parent_1*GRID_SIZE+split), old_fields+(parent_2*GRID_SIZE+split), (GRID_SIZE-split)*sizeof(sf::Vector2f));
+					memcpy(fields+(i*GRID_SIZE),       old_fields+(parent_1*GRID_SIZE), split*sizeof(sf::Vector2f));
+					memcpy(fields+(i*GRID_SIZE+split), old_fields+(parent_2*GRID_SIZE+split), (GRID_SIZE-split)*sizeof(sf::Vector2f));
 				}
 			}
 
@@ -225,7 +228,7 @@ int main(){
 				PROFILE_SCOPE("evo_debug")
 				for(uint32_t x = 0; x < GRID_WIDTH; x++){
 					for(uint32_t y = 0; y < GRID_HEIGHT; y++){
-						auto vec = fields[(PARTICLES-1)*GRID_SIZE + x + y*GRID_WIDTH];
+						auto vec = fields[debug.max_fitness_index*GRID_SIZE + x + y*GRID_WIDTH];
 						auto speed = norm(vec);
 						auto unit = vec/speed;
 						//sf::Color color(speed*255.0f/MAX_SPEED,0,255.0f/MAX_SPEED/speed);
