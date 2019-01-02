@@ -17,7 +17,7 @@ struct ProfileHelper{
 	Clock::time_point end_time;
 	const std::string name;
 
-	ProfileHelper(const std::string& str) 
+	explicit ProfileHelper(const std::string& str) 
 		: name(str) {
 		start_time = Clock::now();
 	}

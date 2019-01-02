@@ -1,12 +1,15 @@
 cmake_minimum_required(VERSION 3.1 FATAL_ERROR)
 project(evo)
 
+#set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 # this is so stupid
 set(CMAKE_MODULE_PATH "/usr/local/share/SFML/cmake/Modules")
 find_package(SFML REQUIRED system window graphics)
 
 set(SOURCES
 	src/main.cpp
+	src/evo.cpp
 	src/perlin.cpp
 	)
 

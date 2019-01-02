@@ -1,6 +1,7 @@
 #pragma once
 
 #include <SFML/System/Vector2.hpp>
+#include <math.h>
 
 inline float norm(sf::Vector2f v){
 	return sqrt(v.x*v.x+v.y*v.y);
