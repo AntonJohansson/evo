@@ -3,6 +3,7 @@
 #include "math_helper.hpp"
 #include <math.h>
 #include <random>
+#include <string.h>
 
 
 namespace evo{

@@ -4,7 +4,7 @@ project(evo)
 #set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # this is so stupid
-set(CMAKE_MODULE_PATH "/usr/local/share/SFML/cmake/Modules")
+#set(CMAKE_MODULE_PATH "/usr/local/share/SFML/cmake/Modules")
 find_package(SFML REQUIRED system window graphics)
 
 set(SOURCES
@@ -26,5 +26,5 @@ target_compile_options(evo PRIVATE
 set_target_properties(evo PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
 include_directories(${SFML_INCLUDE_DIR})
-target_link_libraries(evo ${SFML_LIBRARIES})
+target_link_libraries(evo ${SFML_LIBRARIES} sfml-system sfml-window sfml-graphics)
 
