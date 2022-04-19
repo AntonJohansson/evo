@@ -28,10 +28,11 @@ struct Debug{
 	float    total_fitness = 0.0f;
 	uint32_t max_fitness_index = 0;
 
-	sf::Vertex arrows[2*GRID_WIDTH*GRID_HEIGHT];
+        std::array<sf::Vertex, 2*GRID_WIDTH*GRID_HEIGHT> arrows;
 };
 
 void initialize(sf::Vector2f goal, sf::Vector2f g, float g_radius);
+float fitness_function(Particle &p);
 void evaluate_fitness();
 void crossover();
 void mutate();
@@ -46,5 +47,4 @@ float mass_for_particle(uint32_t particle_index);
 void toggle_collect_debug_data();
 Debug& debug_data();
 
-
-}
+} // namespace evo

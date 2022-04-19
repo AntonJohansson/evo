@@ -17,5 +17,5 @@ constexpr float    MAX_GEN_SPEED = 0.05f;
 
 constexpr uint32_t CYCLE         = 2000;
 
-constexpr uint32_t MUTATION_RATE = 4;
+constexpr float    MUTATION_RATE = 0.1f;
 constexpr uint32_t MUTATIONS_TO_PERFORM = GRID_SIZE * PARTICLES * (MUTATION_RATE/100.0f);

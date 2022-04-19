@@ -18,13 +18,11 @@ add_executable(evo ${SOURCES})
 
 set(CMAKE_CXX_COMPILER "clang++")
 target_compile_options(evo PRIVATE
-	#-fcolor-diagnostics
 	-std=c++1z -Wall -Wextra -Wfatal-errors -g
-	-O3
+        -O3
 	)
 
 set_target_properties(evo PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
 include_directories(${SFML_INCLUDE_DIR})
 target_link_libraries(evo ${SFML_LIBRARIES} sfml-system sfml-window sfml-graphics)
-
